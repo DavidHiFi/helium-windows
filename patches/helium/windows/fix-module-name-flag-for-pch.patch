@@ -1,0 +1,12 @@
+diff --git a/build/toolchain/win/toolchain.gni b/build/toolchain/win/toolchain.gni
+--- a/build/toolchain/win/toolchain.gni
++++ b/build/toolchain/win/toolchain.gni
+@@ -220,7 +220,7 @@ template("msvc_toolchain") {
+ 
+     # -fmodule-name is not supported by MSVC.
+     module_name_flag = ""
+-    if (toolchain_is_clang) {
++    if (toolchain_is_clang && use_clang_modules) {
+       module_name_flag = " \"-fmodule-name={{cc_module_name}}_Private\""
+     }
+ 

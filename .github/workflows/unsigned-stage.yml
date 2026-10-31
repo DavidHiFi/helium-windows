@@ -1,0 +1,38 @@
+name: Build unsigned stage
+
+on:
+  workflow_call:
+    inputs:
+      arch:
+        required: true
+        type: string
+      runs-on:
+        required: true
+        type: string
+      from-artifact:
+        required: true
+        type: boolean
+    outputs:
+      finished:
+        value: ${{ jobs.build.outputs.finished }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runs-on }}
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/prepare-environment
+      - uses: ./.github/actions/stage
+        id: stage
+        with:
+          arm: ${{ inputs.arch == 'arm64' }}
+          from_artifact: ${{ inputs.from-artifact }}
+          package_here: false
+          save_artifact: true

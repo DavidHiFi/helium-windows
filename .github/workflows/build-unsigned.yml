@@ -1,0 +1,190 @@
+name: Build unsigned packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        required: false
+        description: 'Runner image name'
+        default: 'windows-2025'
+
+permissions:
+  contents: read
+
+jobs:
+  build-1:
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: false
+
+  build-2:
+    needs: build-1
+    if: needs.build-1.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-3:
+    needs: build-2
+    if: needs.build-2.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-4:
+    needs: build-3
+    if: needs.build-3.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-5:
+    needs: build-4
+    if: needs.build-4.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-6:
+    needs: build-5
+    if: needs.build-5.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-7:
+    needs: build-6
+    if: needs.build-6.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-8:
+    needs: build-7
+    if: needs.build-7.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-9:
+    needs: build-8
+    if: needs.build-8.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-10:
+    needs: build-9
+    if: needs.build-9.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-11:
+    needs: build-10
+    if: needs.build-10.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-12:
+    needs: build-11
+    if: needs.build-11.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-13:
+    needs: build-12
+    if: needs.build-12.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-14:
+    needs: build-13
+    if: needs.build-13.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-15:
+    needs: build-14
+    if: needs.build-14.outputs.finished == 'false'
+    uses: ./.github/workflows/unsigned-stage.yml
+    with:
+      arch: x86_64
+      runs-on: ${{ inputs.runner }}
+      from-artifact: true
+
+  package:
+    needs: [build-1, build-2, build-3, build-4, build-5, build-6, build-7, build-8, build-9, build-10, build-11, build-12, build-13, build-14, build-15]
+    if: ${{ !cancelled() && !failure() && join(needs.*.outputs.version, '') == '' }}
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/prepare-environment
+      - name: Restore build tree
+        shell: pwsh
+        run: |
+          $artifact = 'C:\helium-windows\build'
+          if (Test-Path $artifact) { Remove-Item $artifact -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $artifact | Out-Null
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifact-x86_64
+          path: C:\helium-windows\build
+      - name: Extract build tree
+        shell: pwsh
+        run: |
+          7z x C:\helium-windows\build\artifacts.zip -oC:\helium-windows\build -y
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Remove-Item C:\helium-windows\build\artifacts.zip -Force
+      - name: Package unsigned
+        shell: pwsh
+        working-directory: C:\helium-windows
+        run: |
+          python -m pip install requests Pillow pywin32==311
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python package.py --build-outputs C:\helium-windows\build\src\out\Default --output-dir C:\helium-windows\packages
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: helium-unsigned-x86_64
+          path: |
+            C:\helium-windows\packages\*.exe
+            C:\helium-windows\packages\*.zip
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
