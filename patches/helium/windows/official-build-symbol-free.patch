@@ -1,0 +1,13 @@
+diff --git a/build.py b/build.py
+--- a/build.py
++++ b/build.py
+@@ -335,6 +335,9 @@ def main():
+             gn_flags += 'is_component_build=true\n'
+         else:
+             gn_flags += 'is_official_build=true\n'
++            # Symbols do not fit a hosted runner's disk.
++            gn_flags += 'symbol_level=0\n'
++            gn_flags += 'v8_symbol_level=0\n'
+ 
+         winsparkle_ed_key = os.environ.get('WINSPARKLE_ED_KEY', '')
+         authenticode_org = os.environ.get('WINSPARKLE_AUTHENTICODE_ORG', '')

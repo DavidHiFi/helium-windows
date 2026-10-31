@@ -34,3 +34,4 @@ helium/windows/updater/update-notifications.patch
 
 helium/windows/native-titlebar-acrylic.patch
 helium/windows/fix-module-name-flag-for-pch.patch
+helium/windows/official-build-symbol-free.patch
