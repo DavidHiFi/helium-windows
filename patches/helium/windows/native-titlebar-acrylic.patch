@@ -1,0 +1,163 @@
+diff --git a/chrome/browser/ui/browser_ui_prefs.cc b/chrome/browser/ui/browser_ui_prefs.cc
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -135,7 +135,7 @@ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumRoundedFrame, true);
+ 
+-  registry->RegisterBooleanPref(prefs::kHeliumNativeFrameMaterials, false);
++  registry->RegisterBooleanPref(prefs::kHeliumNativeFrameMaterials, true);
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumCenteredLocationBar, false);
+ 
+diff --git a/chrome/browser/ui/ui_features.cc b/chrome/browser/ui/ui_features.cc
+--- a/chrome/browser/ui/ui_features.cc
++++ b/chrome/browser/ui/ui_features.cc
+@@ -43,6 +43,8 @@ BASE_FEATURE(kHeliumHidePageActions, base::FEATURE_DISABLED_BY_DEFAULT);
+ bool HeliumNativeFrameAvailable() {
+ #if BUILDFLAG(IS_MAC)
+   return base::FeatureList::IsEnabled(kHeliumNativeFrameMaterials);
++#elif BUILDFLAG(IS_WIN)
++  return true;
+ #else
+   return false;
+ #endif
+diff --git a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
+--- a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
++++ b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
+@@ -30,6 +30,7 @@
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/browser_widget.h"
+ #include "chrome/browser/ui/views/frame/browser_window_property_manager_win.h"
++#include "chrome/browser/ui/views/helium/native_frame_materials.h"
+ #include "chrome/browser/ui/views/frame/system_menu_insertion_delegate_win.h"
+ #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/windows_caption_button.h"
+@@ -494,6 +495,13 @@ views::FrameMode BrowserDesktopWindowTreeHostWin::GetFrameMode() const {
+     return views::FrameMode::SYSTEM_DRAWN;
+   }
+ 
++  // Native frame materials: the system draws the whole frame, including the
++  // caption controls, so the acrylic backdrop shows through the frame
++  // surfaces.
++  if (helium::ShouldUseNativeFrameMaterials(browser_view_)) {
++    return views::FrameMode::SYSTEM_DRAWN;
++  }
++
+   const views::FrameMode system_frame_mode =
+       views::FrameMode::SYSTEM_DRAWN_NO_CONTROLS;
+ 
+diff --git a/chrome/browser/ui/views/frame/browser_frame_view_win.cc b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+--- a/chrome/browser/ui/views/frame/browser_frame_view_win.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+@@ -24,6 +24,7 @@
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/view_ids.h"
+ #include "chrome/browser/ui/views/frame/browser_caption_button_container_win.h"
++#include "chrome/browser/ui/views/helium/native_frame_materials.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/minimize_button_metrics_win.h"
+ #include "chrome/browser/ui/views/frame/safe_invoke/safe_invoke.h"
+@@ -471,6 +472,11 @@ bool BrowserFrameViewWin::IsMaximized() const {
+ 
+ void BrowserFrameViewWin::OnPaint(gfx::Canvas* canvas) {
+   TRACE_EVENT0("views.frame", "BrowserFrameViewWin::OnPaint");
++  if (helium::ShouldUseNativeFrameMaterials(GetBrowserView())) {
++    // The system draws the frame; leave the surface unpainted so the acrylic
++    // backdrop shows through.
++    return;
++  }
+   PaintTitlebar(canvas);
+ }
+ 
+@@ -739,7 +745,8 @@ void BrowserFrameViewWin::LayoutCaptionButtons() {
+   TRACE_EVENT0("views.frame", "BrowserFrameViewWin::LayoutCaptionButtons");
+ 
+   const bool hide_window_buttons =
+-      base::CommandLine::ForCurrentProcess()->HasSwitch("hide-window-buttons");
++      base::CommandLine::ForCurrentProcess()->HasSwitch("hide-window-buttons") ||
++      helium::ShouldUseNativeFrameMaterials(GetBrowserView());
+   caption_button_container_->SetVisible(
+       !hide_window_buttons &&
+       (!browser_widget()->IsFullscreen() ||
+diff --git a/chrome/browser/ui/views/helium/native_frame_materials.cc b/chrome/browser/ui/views/helium/native_frame_materials.cc
+--- a/chrome/browser/ui/views/helium/native_frame_materials.cc
++++ b/chrome/browser/ui/views/helium/native_frame_materials.cc
+@@ -17,7 +17,7 @@
+ namespace helium {
+ 
+ bool ShouldUseNativeFrameMaterials(const BrowserView* browser_view) {
+-#if BUILDFLAG(IS_MAC)
++#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+   if (!features::HeliumNativeFrameAvailable() || !browser_view) {
+     return false;
+   }
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.cc
+@@ -35,6 +35,7 @@ VerticalTabStripBottomContainer::VerticalTabStripBottomContainer(
+           record_new_tab_button_pressed);
+ 
+   new_tab_button_ = AddChildView(std::move(new_tab_button));
++  new_tab_button_->SetVisible(false);
+ 
+   OnCollapseStateChanged(state_controller->GetCollapseState());
+   collapsed_state_change_subscription_ =
+diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_win.cc b/ui/views/widget/desktop_aura/desktop_window_tree_host_win.cc
+--- a/ui/views/widget/desktop_aura/desktop_window_tree_host_win.cc
++++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_win.cc
+@@ -296,6 +296,15 @@ void DesktopWindowTreeHostWin::Init(const Widget::InitParams& params) {
+     }
+   }
+ 
++  if (message_handler_->is_translucent() &&
++      params.type == Widget::InitParams::TYPE_WINDOW) {
++    // Translucent app windows get the acrylic system backdrop so their
++    // transparent frame surfaces can show it through.
++    DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_TRANSIENTWINDOW;
++    DwmSetWindowAttribute(GetHWND(), DWMWA_SYSTEMBACKDROP_TYPE, &backdrop,
++                          sizeof(backdrop));
++  }
++
+   UpdateBackdropColorMode();
+ 
+   CreateCompositor(params.force_software_compositing);
+@@ -1744,7 +1753,8 @@ bool DesktopWindowTreeHostWin::IsCaptureExclusionAllowed() const {
+ 
+ void DesktopWindowTreeHostWin::UpdateBackdropColorMode() {
+   // Update backdrop theme using DWMWA_USE_IMMERSIVE_DARK_MODE.
+-  if (!ShouldAddDWMBackdrop()) {
++  if (!ShouldAddDWMBackdrop() &&
++      !(message_handler_ && message_handler_->is_translucent())) {
+     return;
+   }
+ 
+diff --git a/ui/views/widget/widget_hwnd_utils.cc b/ui/views/widget/widget_hwnd_utils.cc
+--- a/ui/views/widget/widget_hwnd_utils.cc
++++ b/ui/views/widget/widget_hwnd_utils.cc
+@@ -99,8 +99,10 @@ WindowStyles CalculateWindowStylesFromInitParams(
+       styles.ex_style |=
+           native_widget_delegate->IsDialogBox() ? WS_EX_DLGMODALFRAME : 0;
+ 
+-      // See layered window comment below.
+-      if (is_translucent) {
++      // See layered window comment below. Translucent windows that keep
++      // their standard frame (e.g. acrylic app windows with a native title
++      // bar) need these styles so the system still draws the frame.
++      if (is_translucent && params.remove_standard_frame) {
+         styles.style &= static_cast<DWORD>(~(WS_THICKFRAME | WS_CAPTION));
+       }
+       break;
+diff --git a/ui/views/win/hwnd_message_handler.cc b/ui/views/win/hwnd_message_handler.cc
+--- a/ui/views/win/hwnd_message_handler.cc
++++ b/ui/views/win/hwnd_message_handler.cc
+@@ -1147,7 +1147,8 @@ void HWNDMessageHandler::SizeConstraintsChanged() {
+   //   allowing ui::GetResizableFrameThickness() to be used consistently when
+   //   removing the visible system frame.
+   const bool had_caption_on_init = window_style() & WS_CAPTION;
+-  const bool can_resize = !is_translucent_ && delegate_->CanResize();
++  const bool can_resize = delegate_->CanResize() &&
++                          (!is_translucent_ || had_caption_on_init);
+   const bool can_maximize = can_resize && delegate_->CanMaximize();
+ 
+   auto set_style_func = [&style](LONG bit, bool should_set) {
